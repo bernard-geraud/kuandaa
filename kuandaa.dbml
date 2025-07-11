@@ -1,0 +1,238 @@
+// ADDRESS
+Table country {
+    id varchar(36) [pk, note: "UUID for country, primary key"]
+    country_name varchar(20) [not null, note: "name of the country"]
+    country_code varchar(5) [note: "e.g: +237, +149"]
+    flag varchar [note: "flag of the country, e.g: 🇨🇲, 🇧🇷, 🇬🇧, ..."]
+    phone_regex varchar [note: "^(\+0?1\s)?\(?\d{3}\)?$, ..."]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table address {
+    id varchar(36) [pk, note: "UUID for address, primary key"]
+    location_name varchar(60) [note: "e.g Ancienne Mairie Tsinga"]
+    location_address varchar(255) [note: "'latitude,longitude' e.g `3.885306, 11.502750`, `3°53'07.1\"N 11°30'09.9\"E`"]
+    neighborhood varchar(60) [note: "e.g Tsinga, Bankolo, Mendong, ..."]
+    street varchar(60) [note: "e.g 345 Avenue Germaine, ..."]
+    city varchar(60) [note: "Yaounde, Douala, ..."]
+    region varchar(60) [note: "West, North, ..."]
+    postal_code varchar(10) [note: "11 251"]
+    country_id varchar(36) [ref: > country.id]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+// AUTHENTICATION
+Table user {
+    id varchar(36) [pk, note: "UUID for user, primary key"]
+    email varchar(36)
+    phone varchar
+    password varchar
+    first_name varchar
+    last_name varchar
+    photo_profile varchar
+    address_id varchar(36) [ref: > address.id]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+// AUTHORIZATION
+Table user_role {
+    user_id varchar(36) [ref: > user.id, not null]
+    role_id varchar(36) [ref: > role.id, not null]
+    indexes {
+        (user_id, role_id) [pk]
+    }
+}
+
+Table role {
+    id varchar(36) [pk, note: "UUID for role, primary key"]
+    name varchar
+    description text
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table role_permission {
+    role_id varchar(36) [ref: > role.id, not null]
+    permission_id varchar(36) [ref: > permission.id, not null]
+    indexes {
+        (role_id, permission_id) [pk]
+    }
+}
+
+Table permission {
+    id varchar(36) [pk, note: "UUID for permission, primary key"]
+    name varchar
+    description text
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+// EVENT ORGANIZER PROFILE
+Table event_organizer {
+    id varchar(36) [pk, note: "UUID for event organizer, primary key"]
+    user_id varchar(36) [ref: > user.id, not null]
+    organizer_name varchar(60) [not null]
+    banner_url varchar(255)
+    about text [note: "organizer profile"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table organizer_follower {
+    organizer_id varchar(36) [ref: > event_organizer.id, not null]
+    user_id varchar(36) [ref: > user.id, not null]
+    indexes {
+        (organizer_id, user_id) [pk]
+    }
+}
+
+// EVENT
+Table event_type {
+    id varchar(36) [pk, note: "UUID for event type, primary key"]
+    name varchar [not null]
+    description text [default: null]
+    default_icon_url varchar [default: null]
+    default_image_url varchar [default: null]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table event {
+    id varchar(36) [pk, note: "UUID for event, primary key"]
+    organizer_id varchar(36) [ref: > event_organizer.id, not null]
+    event_type_id varchar(36) [ref: > event_type.id, not null]
+    title varchar [not null]
+    description text [default: null]
+    start_datetime timestamp
+    end_datetime timestamp
+    address_id varchar(36) [ref: > address.id, note: "reference of where the event will take place"]
+    sponsor "varchar[]" [default: null, note: "List of the sponsors"]
+    is_public boolean [default: true, note: "false if only the organizer can invite participants"]
+    is_online boolean [note: "true or false"]
+    online_url varchar(255) [default: null, note: "Will be defined only if the will de online"]
+    status enum("DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED", "PUBLISHED", "CANCELLED") [default: "DRAFT"]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+    indexes {
+        (organizer_id, title) [unique]
+    }
+}
+
+Table event_approval_status {
+    event_id varchar(36) [ref: > event.id, not null, note: "reference of event"]
+    event_status enum("DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED", "PUBLISHED", "CANCELLED") [default: "DRAFT"]
+    approval_notes text [default: null, note: "comment of the user approved the event"]
+    approved_by varchar(36) [ref: > user.id, not null, note: "reference of user who make validation"]
+    approved_at timestamp [default: `now()`]
+    indexes {
+        (event_id, event_status) [unique]
+    }
+}
+
+Table event_image {
+    id varchar(36) [pk, note: "UUID for image, primary key"]
+    event_id varchar(36) [ref: > event.id, not null, note: "reference of event"]
+    image_url varchar(255) [not null]
+    is_primary boolean [default: false, note: "true if it is the preview image for the event"]
+    caption varchar(255) [default: null, note: "title or brief explanation accompanying the image or illustration"]
+    upload_at timestamp [default: `now()`, note: "when it goes online"]
+    indexes {
+        (event_id, image_url) [unique]
+    }
+}
+
+Table event_tag {
+    id varchar(36) [pk, note: "UUID for tag, primary key"]
+    name varchar(60) [not null, unique, note: "limited tickets, ..."]
+    description text [default: null]
+    created_at timestamp [default: `now()`]
+}
+
+Table event_tag_mapping {
+    event_id varchar(36) [ref: > event.id, not null, note: "reference of event"]
+    tag_id varchar(36) [ref: > event_tag.id, not null, note: "reference of event tag"]
+    indexes {
+        (event_id, tag_id) [unique]
+    }
+}
+
+// TICKET
+Table ticket_type {
+    id varchar(36) [pk, note: "UUID for ticket type, primary key"]
+    event_id varchar(36) [ref: > event.id, not null, note: "reference of event"]
+    name varchar(60) [not null, note: "ticket name, e.g: VIP, ..."]
+    description text
+    price decimal(10, 2) [not null]
+    quantity_available int [not null]
+    sales_start_date timestamp [note: "e.g 17/08/25"]
+    sales_end_date timestamp [note: "e.g 28/08/25"]
+    min_per_order int [default: 1, note: "min number of the tickets user can book one time"]
+    max_per_order int [default: 10, note: "max number of the tickets user can book one time"]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+// ATTENDEE
+Table attendee {
+    id varchar(36) [pk, note: "UUID for attendee type, primary key"]
+    user_id varchar(36) [ref: > user.id, not null]
+    email varchar(36)
+    phone varchar
+    first_name varchar
+    last_name varchar
+    special_needs text [note: "what the attendee likes (e.g Hobbies, interests, ...)"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table event_bookmark {
+    user_id varchar(36) [ref: > user.id, not null, note: "user who bookmarks the event"]
+    event_id varchar(36) [ref: > event.id, not null, note: "event which had liked by attendee"]
+    indexes {
+        (user_id, event_id) [pk]
+    }
+}
+
+// ORDER
+Table order {
+    id varchar(36) [pk, note: "UUID for order, primary key"]
+    user_id varchar(36) [ref: > user.id, not null]
+    total_amount decimal(10, 2) [not null]
+    payment_status enum("PENDING", "PAID", "FAILED") [default: "PENDING"]
+    payment_method varchar [note: "OM, MOMO, ..."]
+    payment_reference varchar
+    amount_paid decimal(10, 2)
+    payment_phone varchar
+    beneficiary_phone varchar
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table order_item {
+    id varchar(36) [pk, note: "UUID for order item, primary key"]
+    order_id varchar(36) [ref: > order.id, not null]
+    ticket_type_id varchar(36) [ref: > ticket_type.id, not null]
+    quantity int [not null]
+    unit_price decimal(10, 2) [not null]
+    subtotal decimal(10, 2) [not null]
+    attendee_id varchar(36) [ref: > attendee.id, not null, note: "person who will be present on the event"]
+}
+
+Table ticket {
+    id varchar(36) [pk, note: "UUID for ticket, primary key"]
+    order_item_id varchar(36) [ref: > order_item.id, not null]
+    ticket_number varchar(20) [not null, unique, note: "e.g EventName/DayMonthYear/TicketNumberPerDay;  RR/170925/0085,  RR = Retro Revival or RERE if RR already exists. It's also unique per organizer"]
+    qr_code_url varchar(255) [not null, unique, note: "unique per event"]
+    status enum("VALID", "USED", "CANCELLED", "TRANSFERRED") [default: "VALID"]
+    check_in_time timestamp [default: null]
+    check_in_by varchar(36) [ref: > user.id, default: null, note: "user who validates the ticket"]
+    feedback text [default: null, note: "appreciation of the attendee after participating to the event"]
+    created_at timestamp [default: `now()`]
+}
