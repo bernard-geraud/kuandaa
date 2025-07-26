@@ -76,9 +76,22 @@ Table permission {
 Table event_organizer {
     id varchar(36) [pk, note: "UUID for event organizer, primary key"]
     user_id varchar(36) [ref: > user.id, not null]
-    organizer_name varchar(60) [not null]
-    banner_url varchar(255)
-    about text [note: "organizer profile"]
+
+    business_name varchar(255) [not null]
+    banner_image_url varchar(255)
+    business_description text
+    business_email varchar(100)
+    business_phone varchar(20)
+    business_website_url varchar(255)
+    business_logo_url varchar(255)
+    year_established int
+    team_size int
+    about text [note: "bio"]
+    status enum('pending', 'approved', 'rejected', 'suspended') [default: 'pending']
+    approval_notes text,
+    approved_by varchar(36) [ref: > user.id, default: null]
+    approved_at timestamp
+
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
 }
@@ -108,19 +121,61 @@ Table event {
     event_type_id varchar(36) [ref: > event_type.id, not null]
     title varchar [not null]
     description text [default: null]
-    start_datetime timestamp
-    end_datetime timestamp
     address_id varchar(36) [ref: > address.id, note: "reference of where the event will take place"]
-    sponsor "varchar[]" [default: null, note: "List of the sponsors"]
     is_public boolean [default: true, note: "false if only the organizer can invite participants"]
     is_online boolean [note: "true or false"]
+    is_paid boolean [default: true, note: "paid or free event"]
+    total_capacity int [note: "maximum number of attendees"]
+    sales_tickets_start_date timestamp [note: "e.g 17/08/25"]
+    sales_tickets_end_date timestamp [note: "e.g 28/08/25"]
     online_url varchar(255) [default: null, note: "Will be defined only if the will de online"]
-    status enum("DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED", "PUBLISHED", "CANCELLED") [default: "DRAFT"]
+
+    //RECURRING
+    is_recurring boolean [default: false, note: "Whether the event repeats"]
+    recurrence_pattern enum('DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'CUSTOM') [default: null, note: "Recurrence frequency"]
+    start_datetime timestamp [not null, note: "First occurrence start, e.g 2024-08-01 09:00:00+01"]
+    end_datetime timestamp [not null, note: "First occurrence end, e.g 2024-08-01 17:00:00+01"]
+    duration_minutes int [not null, note: "Duration in minutes , e.g 45"]
+    recurrence_end_condition enum('DATE', 'COUNT', 'NEVER') [default: 'NEVER', note: "How recurrence ends, e.g DATE"]
+    recurrence_end_date date [default: null, note: "Last possible occurrence date, e.g 2025-12-31"]
+    recurrence_count int [default: null, note: "Max number of occurrences, e.g 12"]
+    recurrence_interval int [default: 1, note: "Interval between recurrences, e.g 2 (bi-weekly)"]
+    recurrence_byday varchar(60) [default: null, note: "Days of week, e.g MONDAY,WEDNESDAY,FRIDAY"]
+    recurrence_bymonthday varchar(60) [default: null, note: "Days of month (e.g., 15 for 15th). 1,15"]
+    recurrence_byyearday varchar(60) [default: null, note: "Days of year (1-366), e.g. 32,120,243"]
+    recurrence_timezone varchar(60) [default: "GMT+1", note: "Timezone for recurrence, e.g. Africa/Douala"]
+    original_event_id varchar(36) [ref: > event.id, default: null, note: "reference of event"]
+    // END RECURRING
+
+    approval_status enum("DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED", "PUBLISHED", "CANCELLED") [default: "DRAFT"]
     is_active boolean [default: true, note: "to enable or disable an instance"]
+
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
     indexes {
         (organizer_id, title) [unique]
+    }
+}
+
+Table sponsor {
+    id varchar(36) [pk, note: "Unique identifier for the sponsor"]
+    organization_name varchar(255) [not null, note: "Legal name of sponsoring organizationm, e.g TechCorp Inc."]
+    display_name varchar(255) [note: "Public-facing name (if different), e.g TechCorp"]
+    logo_url varchar(512) [note: "HTTPS URL to high-res logo, e.g https://cdn.example.com/logos/techcorp.png"]
+    website_url varchar(512) [note: "Sponsor's website, e.g https://techcorp.com"]
+    contact_name varchar(255) [not null, note: "Main point of contact, e.g John Smith"]
+    contact_email varchar(255) [not null, note: "Contact email, e.g john.smith@techcorp.com"]
+    contact_phone varchar(20) [note: "Contact phone (E.164 format), e.g +12025551234"]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table sponsored_event {
+    event_id varchar(36) [ref: > event.id, not null, note: "reference of event sponsored"]
+    sponsor_id varchar(36) [ref: > sponsor.id, not null, note: "reference of sponsor"]
+    indexes {
+        (event_id, sponsor_id) [unique]
     }
 }
 
@@ -174,6 +229,7 @@ Table ticket_type {
     sales_end_date timestamp [note: "e.g 28/08/25"]
     min_per_order int [default: 1, note: "min number of the tickets user can book one time"]
     max_per_order int [default: 10, note: "max number of the tickets user can book one time"]
+    features json [null, note: "Ticket avantages, [{'prop1': 'valu1', 'prop2': 'value1', ...}]"]
     is_active boolean [default: true, note: "to enable or disable an instance"]
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
@@ -188,22 +244,44 @@ Table attendee {
     first_name varchar
     last_name varchar
     special_needs text [note: "what the attendee likes (e.g Hobbies, interests, ...)"]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
 }
 
+// EVENT BOOKMARK
 Table event_bookmark {
     user_id varchar(36) [ref: > user.id, not null, note: "user who bookmarks the event"]
+    event_id varchar(36) [ref: > event.id, not null, note: "event which had bookmarked by attendee"]
+    indexes {
+        (user_id, event_id) [pk]
+    }
+}
+
+// EVENT LIKES
+Table event_like {
+    user_id varchar(36) [ref: > user.id, not null, note: "user who likes the event"]
     event_id varchar(36) [ref: > event.id, not null, note: "event which had liked by attendee"]
     indexes {
         (user_id, event_id) [pk]
     }
 }
 
+Table event_attendees {
+    event_id varchar(36) [ref: > event.id, not null, note: "event which had liked by attendee"]
+    attendee_id varchar(36) [ref: > attendee.id, not null, note: "person who will be present on the event"]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
+    created_at timestamp [default: `now()`]
+    indexes {
+        (event_id, attendee_id) [pk]
+    }
+}
+
 // ORDER
 Table order {
     id varchar(36) [pk, note: "UUID for order, primary key"]
-    user_id varchar(36) [ref: > user.id, not null]
+    user_id varchar(36) [ref: > user.id, not null, note: "the customer who places the order"]
+    event_id varchar(36) [ref: > event.id, not null, note: "reference of event"]
     total_amount decimal(10, 2) [not null]
     payment_status enum("PENDING", "PAID", "FAILED") [default: "PENDING"]
     payment_method varchar [note: "OM, MOMO, ..."]
@@ -211,6 +289,7 @@ Table order {
     amount_paid decimal(10, 2)
     payment_phone varchar
     beneficiary_phone varchar
+    is_active boolean [default: true, note: "to enable or disable an instance"]
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
 }
@@ -222,17 +301,130 @@ Table order_item {
     quantity int [not null]
     unit_price decimal(10, 2) [not null]
     subtotal decimal(10, 2) [not null]
-    attendee_id varchar(36) [ref: > attendee.id, not null, note: "person who will be present on the event"]
+    indexes {
+        (order_id, ticket_type_id) [unique]
+    }
 }
 
-Table ticket {
+Table tickets {
     id varchar(36) [pk, note: "UUID for ticket, primary key"]
     order_item_id varchar(36) [ref: > order_item.id, not null]
+    attendee_id varchar(36) [ref: > attendee.id, note: "person who will be present on the event"]
     ticket_number varchar(20) [not null, unique, note: "e.g EventName/DayMonthYear/TicketNumberPerDay;  RR/170925/0085,  RR = Retro Revival or RERE if RR already exists. It's also unique per organizer"]
     qr_code_url varchar(255) [not null, unique, note: "unique per event"]
     status enum("VALID", "USED", "CANCELLED", "TRANSFERRED") [default: "VALID"]
     check_in_time timestamp [default: null]
     check_in_by varchar(36) [ref: > user.id, default: null, note: "user who validates the ticket"]
-    feedback text [default: null, note: "appreciation of the attendee after participating to the event"]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
     created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
 }
+
+// EVENT FEEDBACK
+Table event_feedback {
+    event_id varchar(36) [ref: > event.id, not null, note: "event which had liked by attendee"]
+    attendee_id varchar(36) [ref: > attendee.id, not null, note: "person who will be present on the event"]
+    ticket_id varchar(36) [ref: > tickets.id, default: null, note: "reference of ticket"]
+    rating enum(1, 2, 3, 4, 5) [default: null]
+    feedback text [default: null, note: "appreciation of the attendee after participating to the event"]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+    indexes {
+        (event_id, attendee_id) [pk]
+    }
+}
+
+Table feature_event {
+    event_id varchar(36) [ref: > event.id, not null, note: "event reference"]
+    priority int [note: "1, 7, ..."]
+    saved_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+    indexes {
+        (event_id) [pk]
+    }
+}
+
+Table popular_event {
+    event_id varchar(36) [ref: > event.id, not null, note: "event reference"]
+    participation int [not null, note: "number of attendees"]
+    bookmarked int [not null, note: "number of bookmark"]
+    liked int [not null, note: "number of likes"]
+    saved_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+    indexes {
+        (event_id) [pk]
+    }
+}
+
+Table sponsor_event {
+    event_id varchar(36) [ref: > event.id, not null, note: "event reference"]
+    sponsors int [not null, note: "number of sponsor"]
+    saved_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+    indexes {
+        (event_id) [pk]
+    }
+}
+
+//***
+// Providers Marketplace
+//***
+Table provider_category {
+    id varchar(36) [pk, note: "UUID for provider category, primary key"]
+    name varchar(100) [not null]
+    description text
+    parent_category_id varchar(36) [ref: > provider_category.id, default: null, note: "reference of parent category"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table provider {
+    id varchar(36) [pk, note: "UUID for provider, primary key"]
+    user_id int [ref: > user.id, not null]
+
+    // provider properties
+    business_name varchar(255) [not null]
+    banner_image_url varchar(255)
+    business_description text
+    business_email varchar(100)
+    business_phone varchar(20)
+    business_website_url varchar(255)
+    business_logo_url varchar(255)
+    year_established int
+    team_size int
+    about text [note: "bio"]
+    address_id varchar(36) [ref: > address.id]
+
+    // provider validation
+    status enum('pending', 'approved', 'rejected', 'suspended') [default: 'pending']
+    approval_notes text
+    approved_by varchar(36) [ref: > user.id, default: null]
+    approved_at timestamp
+
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table provider_category_mapping {
+    provider_id varchar(36) [ref: > provider.id, not null]
+    category_id varchar(36) [ref: > provider_category.id, not null]
+    indexes {
+        (provider_id, category_id) [pk]
+    }
+}
+
+Table provider_service {
+    // id varchar(36) [pk, note: "UUID for provider service, primary key"]
+    provider_id varchar(36) [ref: > provider.id, not null]
+    event_type_id varchar(36) [ref: > event_type.id, not null]
+    description text
+    base_price decimal(10, 2)
+    indexes {
+        (provider_id, event_type_id) [pk]
+    }
+}
+
+//***
+// Event Toolbox
+//***
