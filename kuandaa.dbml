@@ -79,7 +79,6 @@ Table event_organizer {
 
     business_name varchar(255) [not null]
     banner_image_url varchar(255)
-    business_description text
     business_email varchar(100)
     business_phone varchar(20)
     business_website_url varchar(255)
@@ -88,12 +87,24 @@ Table event_organizer {
     team_size int
     about text [note: "bio"]
     status enum('pending', 'approved', 'rejected', 'suspended') [default: 'pending']
-    approval_notes text,
+    approval_notes text
     approved_by varchar(36) [ref: > user.id, default: null]
     approved_at timestamp
 
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
+}
+
+Table event_organizer_validation_status {
+    id varchar(36) [pk, note: "UUID for event organizer validation, primary key"]
+    organizer_id varchar(36) [ref: > event_organizer.id, not null]
+    status enum('pending', 'approved', 'rejected', 'suspended') [default: 'pending']
+    validate_notes text [default: null, note: "comment of the user"]
+    validate_by varchar(36) [ref: > user.id, not null, note: "reference of user who make validation"]
+    validate_at timestamp [default: `now()`]
+    indexes {
+        (organizer_id, status) [unique]
+    }
 }
 
 Table organizer_follower {
@@ -129,25 +140,20 @@ Table event {
     sales_tickets_start_date timestamp [note: "e.g 17/08/25"]
     sales_tickets_end_date timestamp [note: "e.g 28/08/25"]
     online_url varchar(255) [default: null, note: "Will be defined only if the will de online"]
-
-    //RECURRING
-    is_recurring boolean [default: false, note: "Whether the event repeats"]
-    recurrence_pattern enum('DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'CUSTOM') [default: null, note: "Recurrence frequency"]
+    min_age_attendee int [default: null]
+    max_age_attendee int [default: null]
+    gender_of_attendee enum("FEMALE", "MALE", "MALE_FEMALE") [default: "MALE_FEMALE"]
     start_datetime timestamp [not null, note: "First occurrence start, e.g 2024-08-01 09:00:00+01"]
     end_datetime timestamp [not null, note: "First occurrence end, e.g 2024-08-01 17:00:00+01"]
     duration_minutes int [not null, note: "Duration in minutes , e.g 45"]
-    recurrence_end_condition enum('DATE', 'COUNT', 'NEVER') [default: 'NEVER', note: "How recurrence ends, e.g DATE"]
-    recurrence_end_date date [default: null, note: "Last possible occurrence date, e.g 2025-12-31"]
-    recurrence_count int [default: null, note: "Max number of occurrences, e.g 12"]
-    recurrence_interval int [default: 1, note: "Interval between recurrences, e.g 2 (bi-weekly)"]
-    recurrence_byday varchar(60) [default: null, note: "Days of week, e.g MONDAY,WEDNESDAY,FRIDAY"]
-    recurrence_bymonthday varchar(60) [default: null, note: "Days of month (e.g., 15 for 15th). 1,15"]
-    recurrence_byyearday varchar(60) [default: null, note: "Days of year (1-366), e.g. 32,120,243"]
-    recurrence_timezone varchar(60) [default: "GMT+1", note: "Timezone for recurrence, e.g. Africa/Douala"]
-    original_event_id varchar(36) [ref: > event.id, default: null, note: "reference of event"]
+
+    //RECURRING
+    is_recurring boolean [default: false, note: "Whether the event repeats"]
+    original_event_id varchar(36) [ref: > event.id, default: null, note: "reference of original event"]
+    occurrence_number int [default: null]
     // END RECURRING
 
-    approval_status enum("DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED", "PUBLISHED", "CANCELLED") [default: "DRAFT"]
+    validation_status enum("DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED", "PUBLISHED", "CANCELLED") [default: "DRAFT"]
     is_active boolean [default: true, note: "to enable or disable an instance"]
 
     created_at timestamp [default: `now()`]
@@ -157,8 +163,25 @@ Table event {
     }
 }
 
+Table recurring_event {
+    id varchar(36) [pk, note: "UUID for recurring event, primary key"]
+    event_id varchar(36) [ref: > event.id, not null, note: "reference of event"]
+    recurrence_pattern enum('DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY') [default: null, note: "Recurrence frequency"]
+    recurrence_end_condition enum('DATE', 'COUNT', '...') [default: 'DATE', note: "How recurrence ends, e.g DATE"]
+    recurrence_end_date date [default: null, note: "Last possible occurrence date, e.g 2025-12-31"]
+    recurrence_count int [default: null, note: "Max number of occurrences, e.g 12"]
+    // recurrence_interval int [default: 1, note: "Interval between recurrences, e.g 2 (bi-weekly)"]
+    recurrence_byday varchar(60) [default: null, note: "Days of week, e.g MONDAY,WEDNESDAY,FRIDAY"]
+    recurrence_bymonthday varchar(60) [default: null, note: "Days of month (e.g., 15 for 15th). 1,15"]
+    // recurrence_byyearday varchar(60) [default: null, note: "Days of year (1-366), e.g. 32,120,243"]
+    recurrence_byyearmonth varchar(60) [default: null, note: "Months of year (JANUARY-DECEMBER), e.g APRIL,MARCH,JULY,..."]
+    recurrence_byyearmonthday varchar(60) [default: null, note: "Days of month (e.g., 15 for 15th). 1,15"]
+    recurrence_timezone varchar(60) [default: "GMT+1", note: "Timezone for recurrence, e.g. Africa/Douala"]
+}
+
 Table sponsor {
     id varchar(36) [pk, note: "Unique identifier for the sponsor"]
+    organizer_id varchar(36) [ref: > event_organizer.id, not null]
     organization_name varchar(255) [not null, note: "Legal name of sponsoring organizationm, e.g TechCorp Inc."]
     display_name varchar(255) [note: "Public-facing name (if different), e.g TechCorp"]
     logo_url varchar(512) [note: "HTTPS URL to high-res logo, e.g https://cdn.example.com/logos/techcorp.png"]
@@ -179,12 +202,13 @@ Table sponsored_event {
     }
 }
 
-Table event_approval_status {
+Table event_validation_status {
+    id varchar(36) [pk, note: "UUID for event validation, primary key"]
     event_id varchar(36) [ref: > event.id, not null, note: "reference of event"]
     event_status enum("DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED", "PUBLISHED", "CANCELLED") [default: "DRAFT"]
-    approval_notes text [default: null, note: "comment of the user approved the event"]
-    approved_by varchar(36) [ref: > user.id, not null, note: "reference of user who make validation"]
-    approved_at timestamp [default: `now()`]
+    validate_notes text [default: null, note: "comment of the user approved the event"]
+    validate_by varchar(36) [ref: > user.id, not null, note: "reference of user who make validation"]
+    validate_at timestamp [default: `now()`]
     indexes {
         (event_id, event_status) [unique]
     }
@@ -225,10 +249,11 @@ Table ticket_type {
     description text
     price decimal(10, 2) [not null]
     quantity_available int [not null]
+    number_of_attendee int [default: 1]
     sales_start_date timestamp [note: "e.g 17/08/25"]
     sales_end_date timestamp [note: "e.g 28/08/25"]
     min_per_order int [default: 1, note: "min number of the tickets user can book one time"]
-    max_per_order int [default: 10, note: "max number of the tickets user can book one time"]
+    max_per_order int [default: null, note: "max number of the tickets user can book one time"]
     features json [null, note: "Ticket avantages, [{'prop1': 'valu1', 'prop2': 'value1', ...}]"]
     is_active boolean [default: true, note: "to enable or disable an instance"]
     created_at timestamp [default: `now()`]
@@ -286,9 +311,10 @@ Table order {
     payment_status enum("PENDING", "PAID", "FAILED") [default: "PENDING"]
     payment_method varchar [note: "OM, MOMO, ..."]
     payment_reference varchar
-    amount_paid decimal(10, 2)
+    amount_paid decimal(10, 2) [default: 0]
     payment_phone varchar
     beneficiary_phone varchar
+    payment_reference_id varchar(255)
     is_active boolean [default: true, note: "to enable or disable an instance"]
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
@@ -367,6 +393,36 @@ Table sponsor_event {
     }
 }
 
+// ---
+// Notifications
+// ---
+Table notification_type {
+  id varchar(36) [pk, note: "UUID for the notification type, primary key"]
+  name varchar [not null, note: "POS Created, POS Validated, ..."]
+  message text [not null, note: "message content"]
+  description text
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: null, note: "Timestamp of last user update"]
+}
+
+Table notification_template {
+  id varchar(36) [pk, note: "UUID for the notification type, primary key"]
+  name varchar [not null, note: "Event Created, Event Validated, ..."]
+  template text [not null, note: "message content"]
+  description text
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: null, note: "Timestamp of last user update"]
+}
+
+Table notification {
+  id varchar(36) [pk, note: "UUID for the notifications, primary key"]
+  template_id varchar(36) [ref: > notification_template.id, not null, note: "reference of notification template"]
+  receipient_id varchar(36) [ref: > user.id, not null, note: "reference of receipient"]
+  message text [not null, note: "formatted text with variables"]
+  status enum("Send, Received, Read") [not null, default: "Send"]
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+}
+
 //***
 // Providers Marketplace
 //***
@@ -375,6 +431,7 @@ Table provider_category {
     name varchar(100) [not null]
     description text
     parent_category_id varchar(36) [ref: > provider_category.id, default: null, note: "reference of parent category"]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
 }
@@ -391,16 +448,18 @@ Table provider {
     business_phone varchar(20)
     business_website_url varchar(255)
     business_logo_url varchar(255)
-    year_established int
+    introduction_video_url varchar(255)
+    experience_years int
     team_size int
     about text [note: "bio"]
     address_id varchar(36) [ref: > address.id]
 
     // provider validation
     status enum('pending', 'approved', 'rejected', 'suspended') [default: 'pending']
-    approval_notes text
-    approved_by varchar(36) [ref: > user.id, default: null]
-    approved_at timestamp
+    validate_notes text
+    validate_by varchar(36) [ref: > user.id, default: null]
+    validate_at timestamp
+    is_active boolean [default: true, note: "to enable or disable an instance"]
 
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
@@ -415,16 +474,38 @@ Table provider_category_mapping {
 }
 
 Table provider_service {
-    // id varchar(36) [pk, note: "UUID for provider service, primary key"]
+    id varchar(36) [pk, note: "UUID for provider service, primary key"]
     provider_id varchar(36) [ref: > provider.id, not null]
     event_type_id varchar(36) [ref: > event_type.id, not null]
-    description text
+    service_name varchar(255) [not null]
+    about text [note: "Bio"]
+    introduction_video_url varchar(255)
     base_price decimal(10, 2)
     indexes {
-        (provider_id, event_type_id) [pk]
+        (provider_id, event_type_id) [unique]
     }
 }
 
 //***
 // Event Toolbox
 //***
+Table event_team {
+    id varchar(36) [pk, note: "UUID for team, primary key"]
+    event_id varchar(36) [ref: > event.id, not null, note: "event reference"]
+    event_name varchar(255) [not null]
+    description text
+    created_by varchar(36) [ref: > user.id, not null, note: "user who create the team"]
+    is_active boolean [default: true, note: "to enable or disable an instance"]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table team_member {
+    id varchar(36) [pk, note: "UUID for team member, primary key"]
+    event_team_id varchar(36) [ref: > event_team.id, not null]
+    user_id varchar(36) [ref: > user.id, not null]
+    role varchar(36)
+    is_active boolean [default: true, note: "to enable or disable an instance"]
+    join_date timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
