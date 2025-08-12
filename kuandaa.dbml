@@ -35,6 +35,25 @@ Table user {
     last_name varchar
     photo_profile varchar
     address_id varchar(36) [ref: > address.id]
+
+    account_verification_code int [not null, note: "OPT code, e.g. 654790"]
+    code_expiry timestamp [not null, note: "expire time"]
+    account_verified boolean [default: false, note: "true if the user send the correct verification code before the expiry time"]
+
+    enable_two_factor_auth boolean [default: false]
+
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table two_factor_auth_session {
+    session_id varchar(36) [pk, note: "UUID for user session"]
+    user_id varchar(36) [ref: > user.id, not null, note: "user who tries to connect or who is connected"]
+    ip_address varchar(255) [not null, note: "IP address of device which want to connect"]
+    login_verification_code int [not null, note: "OPT code, e.g. 654790"]
+    code_expiry timestamp [not null, note: "expire time of the OPT code"]
+    login_verified boolean [default: false, note: "if the user is successfully logged"]
+    session_expiry timestamp [default: null, note: "datetime when this session will expire"]
     created_at timestamp [default: `now()`]
     update_at timestamp [default: null]
 }
@@ -116,6 +135,24 @@ Table organizer_follower {
 }
 
 // EVENT
+Table event_categories {
+    id varchar(36) [pk, note: "UUID for category, primary key"]
+    name varchar [not null]
+    description text [default: null]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+}
+
+Table category_event {
+    category_id varchar(36) [ref: > event_categories.id, not null, note: "e.g. Music, Sport, ..."]
+    event_id varchar(36) [ref: > event.id, not null]
+    created_at timestamp [default: `now()`]
+    update_at timestamp [default: null]
+    indexes {
+        (category_id, event_id) [pk]
+    }
+}
+
 Table event_type {
     id varchar(36) [pk, note: "UUID for event type, primary key"]
     name varchar [not null]
@@ -320,21 +357,23 @@ Table order {
     update_at timestamp [default: null]
 }
 
-Table order_item {
-    id varchar(36) [pk, note: "UUID for order item, primary key"]
-    order_id varchar(36) [ref: > order.id, not null]
-    ticket_type_id varchar(36) [ref: > ticket_type.id, not null]
-    quantity int [not null]
-    unit_price decimal(10, 2) [not null]
-    subtotal decimal(10, 2) [not null]
-    indexes {
-        (order_id, ticket_type_id) [unique]
-    }
-}
+// Table order_item {
+//     id varchar(36) [pk, note: "UUID for order item, primary key"]
+//     order_id varchar(36) [ref: > order.id, not null]
+//     ticket_type_id varchar(36) [ref: > ticket_type.id, not null]
+//     quantity int [not null]
+//     unit_price decimal(10, 2) [not null]
+//     subtotal decimal(10, 2) [not null]
+//     indexes {
+//         (order_id, ticket_type_id) [unique]
+//     }
+// }
 
 Table tickets {
     id varchar(36) [pk, note: "UUID for ticket, primary key"]
-    order_item_id varchar(36) [ref: > order_item.id, not null]
+    order_id varchar(36) [ref: > order.id, not null]
+    ticket_type_id varchar(36) [ref: > ticket_type.id, not null]
+    price decimal(10, 2) [not null]
     attendee_id varchar(36) [ref: > attendee.id, note: "person who will be present on the event"]
     ticket_number varchar(20) [not null, unique, note: "e.g EventName/DayMonthYear/TicketNumberPerDay;  RR/170925/0085,  RR = Retro Revival or RERE if RR already exists. It's also unique per organizer"]
     qr_code_url varchar(255) [not null, unique, note: "unique per event"]
